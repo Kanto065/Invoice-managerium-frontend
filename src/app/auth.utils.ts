@@ -62,11 +62,15 @@ export interface ApiUser {
   provider: string;
   bio: string;
   image: string;
+  businessName: string;
+  contactNumber: string;
   address: {
+    address_line1: string;
+    address_line2: string;
+    city: string;
+    state: string;
+    postal_code: string;
     country: string;
-    cityState: string;
-    postalCode: string;
-    taxId: string;
   };
   socialLinks: {
     facebook: string;
@@ -118,9 +122,63 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+async function authedPut<T>(path: string, body: unknown): Promise<T> {
+  const token = getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    if (Array.isArray(data.errors)) {
+      const msg = (data.errors as { path: string; message: string }[])
+        .map((e) => e.message)
+        .join(", ");
+      throw new Error(msg);
+    }
+    throw new Error(data.message ?? "Something went wrong");
+  }
+
+  return data as T;
+}
+
+async function authedPost<T>(basePath: string, path: string, body: unknown): Promise<T> {
+  const token = getToken();
+  const res = await fetch(`${basePath}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    if (Array.isArray(data.errors)) {
+      const msg = (data.errors as { path: string; message: string }[])
+        .map((e) => e.message)
+        .join(", ");
+      throw new Error(msg);
+    }
+    throw new Error(data.message ?? "Something went wrong");
+  }
+
+  return data as T;
+}
+
 export const authApi = {
   register: (payload: RegisterPayload) =>
-    post<{ success: boolean; message: string }>("/register", payload),
+    post<{ success: boolean; message: string; access_token: string; user: ApiUser }>("/register", payload),
 
   login: (payload: LoginPayload) =>
     post<{ success: boolean; access_token: string; message: string; user: ApiUser }>(
@@ -130,4 +188,33 @@ export const authApi = {
 
   verifyEmail: (token: string) =>
     post<{ success: boolean; message: string }>(`/verify/${token}`, {}),
+
+  setupBusinessProfile: (payload: {
+    businessName?: string;
+    contactNumber?: string;
+    address?: Partial<ApiUser["address"]>;
+    socialLinks?: Partial<ApiUser["socialLinks"]>;
+  }) =>
+    authedPut<{ success: boolean; message: string; user: ApiUser }>(
+      "/update-profile",
+      payload
+    ),
+};
+
+// ─── Shop API ─────────────────────────────────────────────────────────────────
+
+const SHOP_BASE = "http://localhost:4000/api/shop";
+
+export const shopApi = {
+  createShop: (payload: {
+    name: string;
+    contactNumber?: string;
+    address?: Partial<ApiUser["address"]>;
+    socialLinks?: Partial<ApiUser["socialLinks"]>;
+  }) =>
+    authedPost<{ success: boolean; message: string; shop: unknown }>(
+      SHOP_BASE,
+      "",
+      payload
+    ),
 };
